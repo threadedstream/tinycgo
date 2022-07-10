@@ -16,6 +16,34 @@ func (v *BasetinycVisitor) VisitStatement(ctx *StatementContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
+func (v *BasetinycVisitor) VisitIfNoElseStatement(ctx *IfNoElseStatementContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BasetinycVisitor) VisitIfElseStatement(ctx *IfElseStatementContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BasetinycVisitor) VisitWhileStatement(ctx *WhileStatementContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BasetinycVisitor) VisitDoWhileStatement(ctx *DoWhileStatementContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BasetinycVisitor) VisitBracedStatement(ctx *BracedStatementContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BasetinycVisitor) VisitExprSemi(ctx *ExprSemiContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BasetinycVisitor) VisitSemi(ctx *SemiContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BasetinycVisitor) VisitParen_expr(ctx *Paren_exprContext) interface{} {
 	return v.VisitChildren(ctx)
 }
@@ -24,11 +52,23 @@ func (v *BasetinycVisitor) VisitExpr(ctx *ExprContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
+func (v *BasetinycVisitor) VisitAssignmentExpr(ctx *AssignmentExprContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BasetinycVisitor) VisitTest(ctx *TestContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
+func (v *BasetinycVisitor) VisitCompareSum_(ctx *CompareSum_Context) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BasetinycVisitor) VisitSum_(ctx *Sum_Context) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BasetinycVisitor) VisitBinop(ctx *BinopContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 

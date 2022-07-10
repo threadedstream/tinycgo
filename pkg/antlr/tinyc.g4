@@ -56,14 +56,42 @@ program
    ;
 
 statement
-   : 'if' paren_expr statement
-   | 'if' paren_expr statement 'else' statement
-   | 'while' paren_expr statement
-   | 'do' statement 'while' paren_expr ';'
-   | '{' statement* '}'
-   | expr ';'
-   | ';'
+   : ifNoElseStatement
+   | ifElseStatement
+   | whileStatement
+   | doWhileStatement
+   | bracedStatement
+   | exprSemi
+   | semi
    ;
+
+ifNoElseStatement
+    : 'if' paren_expr statement
+    ;
+
+ifElseStatement
+    : 'if' paren_expr statement 'else' statement
+    ;
+
+whileStatement
+    : 'while' paren_expr statement
+    ;
+
+doWhileStatement
+    : 'do' statement 'while' paren_expr ';'
+    ;
+
+bracedStatement
+    : '{' statement* '}'
+    ;
+
+exprSemi
+    : expr ';'
+    ;
+
+semi
+    : ';'
+    ;
 
 paren_expr
    : '(' expr ')'
@@ -71,19 +99,31 @@ paren_expr
 
 expr
    : test
-   | id_ '=' expr
+   | assignmentExpr
    ;
+
+assignmentExpr
+    : id_ '=' expr
+    ;
 
 test
    : sum_
-   | sum_ '<' sum_
+   | compareSum_
    ;
+
+compareSum_
+    : sum_ '<' sum_
+    ;
 
 sum_
    : term
-   | sum_ PLUS term
-   | sum_ MINUS term
+   | sum_ binop term
    ;
+
+binop
+    : '+'
+    | '-'
+    ;
 
 term
    : id_

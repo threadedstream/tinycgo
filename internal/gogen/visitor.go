@@ -1,14 +1,16 @@
 package gogen
 
 import (
+	"fmt"
 	"github.com/antlr/antlr4/runtime/Go/antlr"
+	"github.com/threadedstream/tinycgo/internal/pkg/scope"
 	parser "github.com/threadedstream/tinycgo/pkg/antlr"
 	"strings"
-	"fmt"
 )
 
 type GogenVisitor struct {
-	buf strings.Builder
+	buf   strings.Builder
+	scope *scope.Scope
 }
 
 // NewGogenVisitor returns a fresh instance of GogenVisitor
@@ -26,10 +28,26 @@ func (visitor *GogenVisitor) Visit(ctx antlr.Tree) any {
 		return visitor.VisitProgram(child)
 	case *parser.StatementContext:
 		return visitor.VisitStatement(child)
+	case *parser.IfNoElseStatementContext:
+		return visitor.VisitIfNoElseStatement(child)
+	case *parser.IfElseStatementContext:
+		return visitor.VisitIfElseStatement(child)
+	case *parser.BracedStatementContext:
+		return visitor.VisitBracedStatement(child)
+	case *parser.WhileStatementContext:
+		return visitor.VisitWhileStatement(child)
+	case *parser.DoWhileStatementContext:
+		return visitor.VisitDoWhileStatement(child)
+	case *parser.AssignmentExprContext:
+		return visitor.VisitAssignmentExpr(child)
+	case *parser.CompareSum_Context:
+		return visitor.VisitCompareSum_(child)
 	case *parser.Paren_exprContext:
 		return visitor.VisitParen_expr(child)
 	case *parser.ExprContext:
 		return visitor.VisitExpr(child)
+	case *parser.ExprSemiContext:
+		return visitor.VisitExprSemi(child)
 	case *parser.TestContext:
 		return visitor.VisitTest(child)
 	case *parser.Sum_Context:
@@ -44,102 +62,178 @@ func (visitor *GogenVisitor) Visit(ctx antlr.Tree) any {
 }
 
 func (visitor *GogenVisitor) VisitProgram(ctx *parser.ProgramContext) any {
-	var results []any 
+	var results []any
+	s := strings.Builder{}
 	for _, s := range ctx.AllStatement() {
 		results = append(results, visitor.Visit(s))
 	}
-	return results
+	for _, r := range results {
+		s.WriteString(r.(string))
+	}
+	return s.String()
 }
 
 func (visitor *GogenVisitor) VisitStatement(ctx *parser.StatementContext) any {
-	switch {
-	case ctx.Statement(0) != nil:
-		fmt.Printf("if paren_expr statement\n")
-	case ctx.Statement(1) != nil:
-		fmt.Printf("if paren_expr statement else statement\n")
-	case ctx.Statement(2) != nil:
+	if ctx.IfNoElseStatement() != nil {
+		return visitor.Visit(ctx.IfNoElseStatement())
+	} else if ctx.IfElseStatement() != nil {
+		return visitor.Visit(ctx.IfElseStatement())
+	} else if ctx.WhileStatement() != nil {
 		fmt.Printf("while paren_expr statement\n")
-	case ctx.Statement(3) != nil:
+	} else if ctx.DoWhileStatement() != nil {
 		fmt.Printf("do statement while paren_expr ;\n")
-	case ctx.Statement(4) != nil:
-		fmt.Printf("{ statement* }\n")
-	case ctx.Statement(5) != nil:
-		fmt.Printf("expr ;\n")
-	case ctx.Statement(6) != nil:
-		fmt.Printf(";\n")
+	} else if ctx.BracedStatement() != nil {
+		return visitor.Visit(ctx.BracedStatement())
+	} else if ctx.ExprSemi() != nil {
+		return visitor.Visit(ctx.ExprSemi())
+	} else if ctx.Semi() != nil {
+		return ""
 	}
 	return nil
 }
 
-func (visitor *GogenVisitor) IfNoElseStatement(stmt *parser.StatementContext) any {	
+func (visitor *GogenVisitor) VisitIfNoElseStatement(stmt *parser.IfNoElseStatementContext) any {
 	s := strings.Builder{}
-	s.WriteString("if")
+	s.WriteString("if ")
 	parenExprStr := visitor.Visit(stmt.Paren_expr()).(string)
-	s.WriteString(parenExprStr)
-	stmtStr := visitor.Visit(stmt.Statement(0)).(string)
+	s.WriteString(parenExprStr + " != 0")
+	stmtStr := visitor.Visit(stmt.Statement()).(string)
 	s.WriteString(stmtStr)
 	return s.String()
 }
 
+func (visitor *GogenVisitor) VisitIfElseStatement(stmt *parser.IfElseStatementContext) any {
+	s := strings.Builder{}
+	s.WriteString("if")
+	s.WriteString(visitor.Visit(stmt.Paren_expr()).(string))
+	s.WriteString(visitor.Visit(stmt.Statement(0)).(string))
+	s.WriteString("else ")
+	s.WriteString(visitor.Visit(stmt.Statement(1)).(string))
+	return s.String()
+}
+
+func (visitor *GogenVisitor) VisitBracedStatement(stmt *parser.BracedStatementContext) any {
+	scope.Push(&visitor.scope)
+	s := strings.Builder{}
+	s.WriteString("{ \n")
+	for _, statement := range stmt.AllStatement() {
+		s.WriteString(visitor.Visit(statement).(string))
+	}
+	s.WriteString("\n}\n")
+	scope.Pop(&visitor.scope)
+	return s.String()
+}
+
+func (visitor *GogenVisitor) VisitWhileStatement(stmt *parser.WhileStatementContext) any {
+	s := strings.Builder{}
+	s.WriteString("for ")
+	s.WriteString(visitor.Visit(stmt.Paren_expr()).(string) + " ")
+	s.WriteString(visitor.Visit(stmt.Statement()).(string))
+	return s.String()
+}
+
+func (visitor *GogenVisitor) VisitExprSemi(stmt *parser.ExprSemiContext) any {
+	s := strings.Builder{}
+	s.WriteString(" _ = " + visitor.Visit(stmt.Expr()).(string))
+	return s.String()
+}
+
+func (visitor *GogenVisitor) VisitDoWhileStatement(stmt *parser.DoWhileStatementContext) any {
+	s := strings.Builder{}
+	// add that point, one should rewrite tinyc's statement do statement while paren_expr;
+	// to golang's equivalent for cond { }
+	// cond can easily be checked at transpile time, as expressions boil down to
+	// binary operations applied to constants
+	// if condition fails, we execute the body only once
+	s.WriteString("for ")
+	s.WriteString(visitor.Visit(stmt.Paren_expr()).(string) + " ")
+	s.WriteString(visitor.Visit(stmt.Statement()).(string))
+	return s.String()
+}
+
 func (visitor *GogenVisitor) VisitParen_expr(ctx *parser.Paren_exprContext) any {
-	return nil
+	s := strings.Builder{}
+	s.WriteString(visitor.Visit(ctx.Expr()).(string))
+	return s.String()
 }
 
 func (visitor *GogenVisitor) VisitExpr(ctx *parser.ExprContext) any {
-	return nil 
+	switch {
+	case ctx.Test() != nil:
+		return visitor.Visit(ctx.Test())
+	case ctx.AssignmentExpr() != nil:
+		return visitor.Visit(ctx.AssignmentExpr())
+	}
+	return nil
 }
 
 func (visitor *GogenVisitor) VisitTest(ctx *parser.TestContext) any {
 	switch {
-	case ctx.Sum_(0) != nil:
-		return visitor.Visit(ctx.Sum_(0))
-	}	
+	case ctx.Sum_() != nil:
+		return visitor.Visit(ctx.Sum_())
+	case ctx.CompareSum_() != nil:
+		return visitor.Visit(ctx.CompareSum_())
+	}
 	return nil
 }
 
-func (visitor *GogenVisitor) VisitAssignment(ctx *parser.ExprContext) any {
+func (visitor *GogenVisitor) VisitAssignmentExpr(ctx *parser.AssignmentExprContext) any {
 	s := strings.Builder{}
 	s.WriteString(ctx.Id_().GetText())
-	s.WriteString(" = ")
-	s.WriteString(visitor.Visit(ctx.Expr()))
+	if _, ok := visitor.scope.Get(ctx.Id_().GetText()); ok {
+		s.WriteString(" = ")
+	} else {
+		s.WriteString(" := ")
+	}
+	s.WriteString(visitor.Visit(ctx.Expr()).(string))
+	s.WriteRune('\n')
+	return s.String()
+}
+
+func (visitor *GogenVisitor) VisitCompareSum_(ctx *parser.CompareSum_Context) any {
+	s := strings.Builder{}
+	s.WriteString(visitor.Visit(ctx.Sum_(0)).(string))
+	s.WriteString(" < ")
+	s.WriteString(visitor.Visit(ctx.Sum_(1)).(string))
 	return s.String()
 }
 
 func (visitor *GogenVisitor) VisitSum_(ctx *parser.Sum_Context) any {
 	switch {
-	case ctx.Term() != nil:
+	default:
+		return visitor.VisitBinarySum_(ctx)
+	case ctx.Term() != nil && ctx.Sum_() == nil:
 		return visitor.Visit(ctx.Term())
-	case ctx.Sum_() != nil:
-		return visitor.VisitBInarySum_(ctx.Sum_())
 	}
-	return nil
 }
 
-func (visitor *GogenVisitor) VisitBinarySum_(ctx *parser.Sum_Context) any {
+func (visitor *GogenVisitor) VisitBinarySum_(ctx parser.ISum_Context) any {
+	concreteCtx := ctx.(*parser.Sum_Context)
+	binop := concreteCtx.Binop().(*parser.BinopContext)
 	switch {
-	case ctx.PLUS() != nil:
-		return visitor.VisitSum_Add(ctx)	
-	case ctx.MINUS() != nil:
-		return visitor.VisitSum_Sub(ctx)
+	case binop.PLUS() != nil:
+		return visitor.VisitSum_Add(concreteCtx)
+	case binop.MINUS() != nil:
+		return visitor.VisitSum_Sub(concreteCtx)
 	}
 	return nil
 }
 
 func (visitor *GogenVisitor) VisitSum_Add(ctx *parser.Sum_Context) any {
 	s := strings.Builder{}
-	s.WriteString(visitor.Visit(ctx.Sum_()))
+	s.WriteString(visitor.Visit(ctx.Sum_()).(string))
 	s.WriteString(" + ")
-	s.WriteString(visitor.Visit(ctx.Term()))
+	s.WriteString(visitor.Visit(ctx.Term()).(string))
 	return s.String()
-}	
+}
 
 func (visitor *GogenVisitor) VisitSum_Sub(ctx *parser.Sum_Context) any {
 	s := strings.Builder{}
-	s.WriteString(visitor.Visit(ctx.Sum_()))
+	s.WriteString(visitor.Visit(ctx.Sum_()).(string))
 	s.WriteString(" - ")
-	s.WriteString(visitor.Visit(ctx.Term()))
+	s.WriteString(visitor.Visit(ctx.Term()).(string))
 	return s.String()
-} 
+}
 
 func (visitor *GogenVisitor) VisitTerm(ctx *parser.TermContext) any {
 	switch {
@@ -150,14 +244,13 @@ func (visitor *GogenVisitor) VisitTerm(ctx *parser.TermContext) any {
 	case ctx.Paren_expr() != nil:
 		return visitor.Visit(ctx.Paren_expr())
 	}
-	return nil 
-}
-
-func (visitor *GogenVisitor) VisitId_(ctx *parser.Id_Context) any {
 	return nil
 }
 
-func (visitor *GogenVisitor) VisitInteger(ctx *parser.IntegerContext) any {
-	return nil 
+func (visitor *GogenVisitor) VisitId_(ctx *parser.Id_Context) any {
+	return ctx.STRING().GetText()
 }
 
+func (visitor *GogenVisitor) VisitInteger(ctx *parser.IntegerContext) any {
+	return ctx.INT().GetText()
+}
