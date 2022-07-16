@@ -1,7 +1,6 @@
 package gogen
 
 import (
-	"fmt"
 	"github.com/antlr/antlr4/runtime/Go/antlr"
 	"github.com/threadedstream/tinycgo/internal/pkg/scope"
 	parser "github.com/threadedstream/tinycgo/pkg/antlr"
@@ -10,6 +9,7 @@ import (
 
 type GogenVisitor struct {
 	buf   strings.Builder
+	ev    *EvalVisitor
 	scope *scope.Scope
 }
 
@@ -79,9 +79,9 @@ func (visitor *GogenVisitor) VisitStatement(ctx *parser.StatementContext) any {
 	} else if ctx.IfElseStatement() != nil {
 		return visitor.Visit(ctx.IfElseStatement())
 	} else if ctx.WhileStatement() != nil {
-		fmt.Printf("while paren_expr statement\n")
+		return visitor.Visit(ctx.WhileStatement())
 	} else if ctx.DoWhileStatement() != nil {
-		fmt.Printf("do statement while paren_expr ;\n")
+		return visitor.VisitDoWhileStatement(ctx.DoWhileStatement())
 	} else if ctx.BracedStatement() != nil {
 		return visitor.Visit(ctx.BracedStatement())
 	} else if ctx.ExprSemi() != nil {
@@ -127,24 +127,27 @@ func (visitor *GogenVisitor) VisitBracedStatement(stmt *parser.BracedStatementCo
 func (visitor *GogenVisitor) VisitWhileStatement(stmt *parser.WhileStatementContext) any {
 	s := strings.Builder{}
 	s.WriteString("for ")
-	s.WriteString(visitor.Visit(stmt.Paren_expr()).(string) + " ")
+	s.WriteString(visitor.Visit(stmt.Paren_expr()).(string) + " {\n")
 	s.WriteString(visitor.Visit(stmt.Statement()).(string))
+	s.WriteString("\n}\n")
 	return s.String()
 }
 
 func (visitor *GogenVisitor) VisitExprSemi(stmt *parser.ExprSemiContext) any {
 	s := strings.Builder{}
-	s.WriteString(" _ = " + visitor.Visit(stmt.Expr()).(string))
+	s.WriteString(visitor.Visit(stmt.Expr()).(string))
 	return s.String()
 }
 
-func (visitor *GogenVisitor) VisitDoWhileStatement(stmt *parser.DoWhileStatementContext) any {
+func (visitor *GogenVisitor) VisitDoWhileStatement(ctx parser.IDoWhileStatementContext) any {
+	stmt := ctx.(*parser.DoWhileStatementContext)
 	s := strings.Builder{}
 	// at that point, one should rewrite tinyc's statement "do statement while paren_expr"
 	// to golang's equivalent "for cond { }"
 	// "cond" can easily be checked at transpile time, as expressions boil down to
 	// binary operations applied to constants
 	// if condition fails, we execute the body only once
+	s.WriteString(visitor.Visit(stmt.Statement()).(string))
 	s.WriteString("for ")
 	s.WriteString(visitor.Visit(stmt.Paren_expr()).(string) + " ")
 	s.WriteString(visitor.Visit(stmt.Statement()).(string))

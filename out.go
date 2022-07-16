@@ -1,7 +1,16 @@
+
 package main
 
 func main() {
-	if 3+5 != 0 {
-		_ = 5 + 6
-	}
+		
+{ 
+i := 125
+j := 100
+for i - j {
+ifi < jj := j - i
+else i := i - j
+
+}
+
+}
 }
