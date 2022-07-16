@@ -140,9 +140,9 @@ func (visitor *GogenVisitor) VisitExprSemi(stmt *parser.ExprSemiContext) any {
 
 func (visitor *GogenVisitor) VisitDoWhileStatement(stmt *parser.DoWhileStatementContext) any {
 	s := strings.Builder{}
-	// add that point, one should rewrite tinyc's statement do statement while paren_expr;
-	// to golang's equivalent for cond { }
-	// cond can easily be checked at transpile time, as expressions boil down to
+	// at that point, one should rewrite tinyc's statement "do statement while paren_expr"
+	// to golang's equivalent "for cond { }"
+	// "cond" can easily be checked at transpile time, as expressions boil down to
 	// binary operations applied to constants
 	// if condition fails, we execute the body only once
 	s.WriteString("for ")
@@ -253,4 +253,8 @@ func (visitor *GogenVisitor) VisitId_(ctx *parser.Id_Context) any {
 
 func (visitor *GogenVisitor) VisitInteger(ctx *parser.IntegerContext) any {
 	return ctx.INT().GetText()
+}
+
+func (visitor *GogenVisitor) evaluateCondExpr(expr *parser.ExprContext) bool {
+	return false
 }
