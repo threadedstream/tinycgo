@@ -1,6 +1,7 @@
 package gogen
 
 import (
+	"fmt"
 	"github.com/antlr/antlr4/runtime/Go/antlr"
 	"github.com/threadedstream/tinycgo/internal/pkg/scope"
 	parser "github.com/threadedstream/tinycgo/pkg/antlr"
@@ -11,6 +12,7 @@ type GogenVisitor struct {
 	buf   strings.Builder
 	ev    *EvalVisitor
 	scope *scope.Scope
+	depth int
 }
 
 // NewGogenVisitor returns a fresh instance of GogenVisitor
@@ -62,13 +64,9 @@ func (visitor *GogenVisitor) Visit(ctx antlr.Tree) any {
 }
 
 func (visitor *GogenVisitor) VisitProgram(ctx *parser.ProgramContext) any {
-	var results []any
 	s := strings.Builder{}
-	for _, s := range ctx.AllStatement() {
-		results = append(results, visitor.Visit(s))
-	}
-	for _, r := range results {
-		s.WriteString(r.(string))
+	for _, stmt := range ctx.AllStatement() {
+		s.WriteString(visitor.Visit(stmt).(string))
 	}
 	return s.String()
 }
@@ -104,8 +102,10 @@ func (visitor *GogenVisitor) VisitIfNoElseStatement(stmt *parser.IfNoElseStateme
 
 func (visitor *GogenVisitor) VisitIfElseStatement(stmt *parser.IfElseStatementContext) any {
 	s := strings.Builder{}
-	s.WriteString("if")
+	depth := visitor.depth
+	s.WriteString("if ")
 	s.WriteString(visitor.VisitCondExpr(stmt.Paren_expr()) + "{\n")
+	s.WriteString(visitor.nRunes('\t', depth))
 	s.WriteString(visitor.Visit(stmt.Statement(0)).(string))
 	s.WriteString("\n}")
 	s.WriteString(" else {\n")
@@ -116,40 +116,51 @@ func (visitor *GogenVisitor) VisitIfElseStatement(stmt *parser.IfElseStatementCo
 
 func (visitor *GogenVisitor) VisitBracedStatement(stmt *parser.BracedStatementContext) any {
 	scope.Push(&visitor.scope)
+	depth := visitor.depth
+	visitor.depth++
 	s := strings.Builder{}
-	s.WriteString("{ \n")
+	s.WriteString(fmt.Sprintf("%s{ \n", visitor.nRunes('\t', depth)))
 	for _, statement := range stmt.AllStatement() {
 		s.WriteString(visitor.Visit(statement).(string))
 	}
-	s.WriteString("\n}\n")
+	s.WriteString(fmt.Sprintf("\n%s}\n", visitor.nRunes('\t', depth)))
 	scope.Pop(&visitor.scope)
+	visitor.depth--
 	return s.String()
 }
 
 func (visitor *GogenVisitor) VisitWhileStatement(stmt *parser.WhileStatementContext) any {
 	s := strings.Builder{}
+	depth := visitor.depth
+	visitor.depth++
 	s.WriteString("for ")
 	s.WriteString(visitor.VisitCondExpr(stmt.Paren_expr()) + " {\n")
+	s.WriteString(visitor.nRunes('\t', depth))
 	s.WriteString(visitor.Visit(stmt.Statement()).(string))
 	s.WriteString("\n}\n")
+	visitor.depth--
 	return s.String()
 }
 
 func (visitor *GogenVisitor) VisitExprSemi(stmt *parser.ExprSemiContext) any {
 	s := strings.Builder{}
-	s.WriteString(visitor.Visit(stmt.Expr()).(string))
+	depth := visitor.depth
+	s.WriteString(fmt.Sprintf("%s%s", visitor.nRunes('\t', depth), visitor.Visit(stmt.Expr()).(string)))
+	s.WriteRune('\n')
 	return s.String()
 }
 
 func (visitor *GogenVisitor) VisitDoWhileStatement(ctx parser.IDoWhileStatementContext) any {
 	stmt := ctx.(*parser.DoWhileStatementContext)
+	depth := visitor.depth
+	visitor.depth++
 	s := strings.Builder{}
 	// at that point, one should rewrite tinyc's statement "do statement while paren_expr"
 	// to golang's equivalent "for cond { }"
 	// "cond" can easily be checked at transpile time, as expressions boil down to
 	// binary operations applied to constants
 	// if condition fails, we execute the body only once
-	s.WriteString(visitor.Visit(stmt.Statement()).(string))
+	s.WriteString(fmt.Sprintf("%s%s", visitor.nRunes('\t', depth),visitor.Visit(stmt.Statement()).(string))
 	s.WriteString("for ")
 	s.WriteString(visitor.VisitCondExpr(stmt.Paren_expr()) + " ")
 	s.WriteString(visitor.Visit(stmt.Statement()).(string))
@@ -158,7 +169,9 @@ func (visitor *GogenVisitor) VisitDoWhileStatement(ctx parser.IDoWhileStatementC
 
 func (visitor *GogenVisitor) VisitParen_expr(ctx *parser.Paren_exprContext) any {
 	s := strings.Builder{}
+	s.WriteString("(")
 	s.WriteString(visitor.Visit(ctx.Expr()).(string))
+	s.WriteString(")")
 	return s.String()
 }
 
@@ -192,7 +205,6 @@ func (visitor *GogenVisitor) VisitAssignmentExpr(ctx *parser.AssignmentExprConte
 		visitor.scope.Put(ctx.Id_().GetText(), struct{}{})
 	}
 	s.WriteString(visitor.Visit(ctx.Expr()).(string))
-	s.WriteRune('\n')
 	return s.String()
 }
 
@@ -277,4 +289,12 @@ func (visitor *GogenVisitor) VisitInteger(ctx *parser.IntegerContext) any {
 
 func (visitor *GogenVisitor) evaluateCondExpr(expr *parser.ExprContext) bool {
 	return false
+}
+
+func (visitor *GogenVisitor) nRunes(r rune, n int) string {
+	s := strings.Builder{}
+	for i := 0; i < n; i++ {
+		s.WriteRune(r)
+	}
+	return s.String()
 }
