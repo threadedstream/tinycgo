@@ -95,20 +95,22 @@ func (visitor *GogenVisitor) VisitStatement(ctx *parser.StatementContext) any {
 func (visitor *GogenVisitor) VisitIfNoElseStatement(stmt *parser.IfNoElseStatementContext) any {
 	s := strings.Builder{}
 	s.WriteString("if ")
-	parenExprStr := visitor.Visit(stmt.Paren_expr()).(string)
-	s.WriteString(parenExprStr + " != 0")
+	s.WriteString(visitor.VisitCondExpr(stmt.Paren_expr()) + "{\n")
 	stmtStr := visitor.Visit(stmt.Statement()).(string)
 	s.WriteString(stmtStr)
+	s.WriteString("\n}\n")
 	return s.String()
 }
 
 func (visitor *GogenVisitor) VisitIfElseStatement(stmt *parser.IfElseStatementContext) any {
 	s := strings.Builder{}
 	s.WriteString("if")
-	s.WriteString(visitor.Visit(stmt.Paren_expr()).(string))
+	s.WriteString(visitor.VisitCondExpr(stmt.Paren_expr()) + "{\n")
 	s.WriteString(visitor.Visit(stmt.Statement(0)).(string))
-	s.WriteString("else ")
+	s.WriteString("\n}")
+	s.WriteString(" else {\n")
 	s.WriteString(visitor.Visit(stmt.Statement(1)).(string))
+	s.WriteString("\n}")
 	return s.String()
 }
 
@@ -127,7 +129,7 @@ func (visitor *GogenVisitor) VisitBracedStatement(stmt *parser.BracedStatementCo
 func (visitor *GogenVisitor) VisitWhileStatement(stmt *parser.WhileStatementContext) any {
 	s := strings.Builder{}
 	s.WriteString("for ")
-	s.WriteString(visitor.Visit(stmt.Paren_expr()).(string) + " {\n")
+	s.WriteString(visitor.VisitCondExpr(stmt.Paren_expr()) + " {\n")
 	s.WriteString(visitor.Visit(stmt.Statement()).(string))
 	s.WriteString("\n}\n")
 	return s.String()
@@ -149,7 +151,7 @@ func (visitor *GogenVisitor) VisitDoWhileStatement(ctx parser.IDoWhileStatementC
 	// if condition fails, we execute the body only once
 	s.WriteString(visitor.Visit(stmt.Statement()).(string))
 	s.WriteString("for ")
-	s.WriteString(visitor.Visit(stmt.Paren_expr()).(string) + " ")
+	s.WriteString(visitor.VisitCondExpr(stmt.Paren_expr()) + " ")
 	s.WriteString(visitor.Visit(stmt.Statement()).(string))
 	return s.String()
 }
@@ -187,6 +189,7 @@ func (visitor *GogenVisitor) VisitAssignmentExpr(ctx *parser.AssignmentExprConte
 		s.WriteString(" = ")
 	} else {
 		s.WriteString(" := ")
+		visitor.scope.Put(ctx.Id_().GetText(), struct{}{})
 	}
 	s.WriteString(visitor.Visit(ctx.Expr()).(string))
 	s.WriteRune('\n')
@@ -248,6 +251,20 @@ func (visitor *GogenVisitor) VisitTerm(ctx *parser.TermContext) any {
 		return visitor.Visit(ctx.Paren_expr())
 	}
 	return nil
+}
+
+func (visitor *GogenVisitor) VisitCondExpr(ictx parser.IParen_exprContext) string {
+	s := strings.Builder{}
+	ctx := ictx.(*parser.Paren_exprContext)
+	s.WriteString("( ")
+	str := visitor.Visit(ctx.Expr()).(string)
+	s.WriteString(str)
+	if strings.IndexRune(str, '<') < 0 {
+		s.WriteString(") > 0")
+	} else {
+		s.WriteString(")")
+	}
+	return s.String()
 }
 
 func (visitor *GogenVisitor) VisitId_(ctx *parser.Id_Context) any {
