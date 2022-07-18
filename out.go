@@ -1,25 +1,14 @@
 
 package main
 
-func main() 
-		
+func main() { 
+
 { 
-i := 125
-j := 100
-for ( i - j) > 0 {
-if( i < j){
-j = j - i
+	i := 1
+	for ( (i = i + 10) < 50) {
 
-} else {
-i = i - j
-
-}
-}
-
-}
-}
-}- j
-			}
-		}
 	}
+
+}
+
 }

@@ -13,11 +13,12 @@ const (
 	prologue = `
 package main
 
-func main() 
-		
+func main() { 
+
 `
 
-	epilogue = ``
+	epilogue = `
+}`
 )
 
 func main() {
