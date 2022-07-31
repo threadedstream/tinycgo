@@ -1,14 +1,16 @@
-
 package main
 
-func main() { 
+func main() {
 
-{ 
-	i := 1
-	for ( (i = i + 10) < 50) {
+	{
+		i := 7
+		if i < 5 {
+			x := 1
+		}
+		if i < 10 {
+			y := 2
+		}
 
 	}
-
-}
 
 }

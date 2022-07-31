@@ -9,16 +9,18 @@ import (
 )
 
 type GogenVisitor struct {
-	buf   strings.Builder
-	ev    *EvalVisitor
-	scope *scope.Scope
-	depth int
+	buf        strings.Builder
+	ev         *EvalVisitor
+	scope      *scope.Scope
+	depth      int
+	patternMap map[string]string
 }
 
 // NewGogenVisitor returns a fresh instance of GogenVisitor
 func NewGogenVisitor() *GogenVisitor {
 	return &GogenVisitor{
-		buf: strings.Builder{},
+		buf:        strings.Builder{},
+		patternMap: make(map[string]string),
 	}
 }
 
@@ -92,11 +94,14 @@ func (visitor *GogenVisitor) VisitStatement(ctx *parser.StatementContext) any {
 
 func (visitor *GogenVisitor) VisitIfNoElseStatement(stmt *parser.IfNoElseStatementContext) any {
 	s := strings.Builder{}
-	s.WriteString("if ")
+	depth := visitor.depth
+	visitor.depth++
+	s.WriteString(fmt.Sprintf("%sif ", visitor.pad(depth)))
 	s.WriteString(visitor.VisitCondExpr(stmt.Paren_expr()) + "{\n")
 	stmtStr := visitor.Visit(stmt.Statement()).(string)
-	s.WriteString(stmtStr)
-	s.WriteString("\n}\n")
+	s.WriteString(fmt.Sprintf("%s", stmtStr))
+	s.WriteString(fmt.Sprintf("\n%s}\n", visitor.pad(depth)))
+	visitor.depth--
 	return s.String()
 }
 
@@ -131,15 +136,39 @@ func (visitor *GogenVisitor) VisitBracedStatement(stmt *parser.BracedStatementCo
 }
 
 func (visitor *GogenVisitor) VisitWhileStatement(stmt *parser.WhileStatementContext) any {
+	var (
+		containsAssignment bool
+		assignmentExprStr  string
+	)
 	s := strings.Builder{}
 	depth := visitor.depth
 	visitor.depth++
+	node := new(parser.AssignmentExprContext)
+	visitor.hasAssignmentInside(stmt.Paren_expr(), &containsAssignment, &node)
+	if containsAssignment {
+		assignmentExprStr = visitor.VisitAssignmentExpr(node).(string)
+		// save it into pattern map
+		visitor.patternMap[assignmentExprStr] = node.Id_().GetText()
+	}
 	s.WriteString(fmt.Sprintf("%sfor ", visitor.pad(depth)))
 	s.WriteString(fmt.Sprintf("%s {\n", visitor.VisitCondExpr(stmt.Paren_expr())))
 	s.WriteString(visitor.Visit(stmt.Statement()).(string))
+	if containsAssignment {
+		s.WriteString(fmt.Sprintf("%s%s", visitor.pad(visitor.depth), assignmentExprStr))
+	}
 	s.WriteString(fmt.Sprintf("\n%s}\n", visitor.pad(depth)))
 	visitor.depth--
 	return s.String()
+}
+
+func (visitor *GogenVisitor) hasAssignmentInside(tree antlr.Tree, found *bool, ctx **parser.AssignmentExprContext) {
+	if expr, ok := tree.(*parser.AssignmentExprContext); ok {
+		*ctx = expr
+		*found = true
+	}
+	for _, child := range tree.GetChildren() {
+		visitor.hasAssignmentInside(child, found, ctx)
+	}
 }
 
 func (visitor *GogenVisitor) VisitExprSemi(stmt *parser.ExprSemiContext) any {
@@ -207,6 +236,9 @@ func (visitor *GogenVisitor) VisitAssignmentExpr(ctx *parser.AssignmentExprConte
 		visitor.scope.Put(ctx.Id_().GetText(), struct{}{})
 	}
 	s.WriteString(visitor.Visit(ctx.Expr()).(string))
+	if val, ok := visitor.patternMap[s.String()]; ok {
+		return val
+	}
 	return s.String()
 }
 
@@ -277,6 +309,7 @@ func (visitor *GogenVisitor) VisitCondExpr(ictx parser.IParen_exprContext) strin
 	str := visitor.Visit(ctx.Expr()).(string)
 	s.WriteString(str)
 	if strings.IndexRune(str, '<') < 0 {
+		// avoiding expressions like if ((x = x + 10)) { ... }
 		s.WriteString(") > 0")
 	} else {
 		s.WriteString(")")
